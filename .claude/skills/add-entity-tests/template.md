@@ -241,10 +241,7 @@ def test_get_page_with_filters(
     )
 
     # Assert
-    assert result.is_ok()
-    result_value = result.unwrap()
-    assert result_value.items[0].id == {entity_name}.id
-    assert result_value.total == 1
+    assert result == Ok(ModelList[{EntityName}](items=[{entity_name}], total=1))
 
     # Verify filters were passed correctly
     {EntityName}DataService.get_by_page.assert_called_once()  # ty: ignore[has-type]
