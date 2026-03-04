@@ -11,20 +11,20 @@ Creates complete test coverage for an entity including:
 4. Router layer unit tests (all endpoints with success and error cases)
 5. Updates conftest.py with necessary fixture plugins
 
-## IMPORTANT: Read CORRECTIONS.md First
+## Critical Patterns (Read Before Generating)
 
-**Before generating tests, read `CORRECTIONS.md` in this directory for common errors and their fixes.**
+These patterns must be followed exactly — deviating causes test failures:
 
-Key patterns to follow (see CORRECTIONS.md for details):
-- ModelList uses `items` and `total` (NOT `data`, `total_count`, `page_number`, `page_size`)
-- ErrorStatus uses `NOT_FOUND_ERROR` and `BAD_REQUEST` (NOT `NOT_FOUND`, `VALIDATION_ERROR`)
-- ErrorResult uses `details` parameter (NOT `message`)
-- Service fixtures must be defined in conftest.py with session
-- Mock `get_by_page` returning tuple `([entities], count)` (NOT `get_page`)
+- `ModelList` uses `items` and `total` ONLY (NOT `data`, `total_count`, `page_number`, `page_size`)
+- `ErrorStatus` uses `NOT_FOUND_ERROR` and `BAD_REQUEST` (NOT `NOT_FOUND`, `VALIDATION_ERROR`)
+- `ErrorResult` uses `details` parameter (NOT `message`)
+- Service fixtures must be defined in `conftest.py` with a real `session` (NOT a MagicMock)
+- Mock `get_by_page` returning a tuple `([entities], count)` (NOT `get_page`)
 - Filters use `field=EntityType.field_name` (NOT `field_name="string"`)
-- Filter assertions check `filter.field == EntityType.field_name` (NOT `filter.field_name == "string"`)
+- Filter assertions check `filter.field == EntityType.field_name`
 - Use explicit datetime values (NOT `datetime.now()`)
 - All fixtures use `scope="session"` for performance
+- Never use `**model_dump()` in fixtures — always assign fields explicitly
 
 ## Instructions
 
@@ -44,9 +44,9 @@ Ask the user:
 - Ask in a regular message:
   "Does the entity's service layer have any custom query parameters (filters)?
 
-  For example, Task has 'is_active' and 'is_completed' filters in the get_page method.
+  For example, Task has 'is_completed' and 'user_id' filters in the get_page method.
 
-  Please list the filter names and their types (e.g., is_active: bool, status: str).
+  Please list the filter names and their types (e.g., is_completed: bool, user_id: UUID).
   Type 'none' if there are no custom filters beyond standard pagination."
 
 **Question 3: Unique Constraints**
@@ -133,33 +133,26 @@ Use the templates in `template.md` to create files in this exact sequence:
    - Test get_page with all filters (if any) - verify filter objects in detail
    - Test get_page without filters - verify empty filter list
    - Test get_page with partial filters (if multiple filters) - verify correct filters passed
-   - Use `.is_ok()` and `.unwrap()` pattern for Result checking
+   - Use `assert result == Ok(ModelList[...])` for result assertions
    - Additional custom service method tests (if any)
 
-4. **Router Tests File** (`src/tests/unit/routers/test_{entity_name}.py`)**
-   - **Unit Test Style (Recommended)**:
-     - Test router functions directly by calling them
-     - Pass service dependency as parameter
-     - Mock service methods with mocker.patch.object()
-     - Verify return values and service method calls
-     - Check HTTPException raised for error cases
-   - **Integration Test Style (Alternative)**:
-     - Use TestClient to make HTTP requests
-     - Mock service layer (not data service)
-     - Verify HTTP status codes and response JSON
-   - **Both styles test**:
-     - GET list endpoint (success + validation error)
-     - GET by ID endpoint (success + not found)
-     - POST create endpoint (success + validation error + conflict if unique constraints)
-     - PATCH update endpoint (success + not found + validation error + conflict if unique constraints)
-     - DELETE endpoint (success + not found)
+4. **Router Tests File** (`src/tests/unit/routers/test_{entity_name}.py`) — use Unit Test Style:
+   - Call router functions directly by importing them
+   - Pass service dependency as parameter using `mocker.patch.object(service_instance, "method", ...)`
+   - Test GET list endpoint (success, with filters if any, validation error)
+   - Test GET by ID endpoint (success, not found)
+   - Test POST create endpoint (success, validation error, conflict if unique constraints)
+   - Test PATCH update endpoint (success, not found, validation error, conflict if unique constraints)
+   - Test DELETE endpoint (success, not found)
 
 5. **Update conftest.py**
-   - Add fixture plugin registration: `"src.tests.fixtures.{entity_name}_fixtures"`
+   - Add fixture plugin: `"src.tests.fixtures.{entity_name}_fixtures"`
+   - Add `{entity_name}_data_service` fixture (real session, not mock)
+   - Add `{entity_name}_service` fixture
 
 See `template.md` for all code templates with placeholders.
 
-See `examples/sample.md` for a complete example based on the User entity.
+See `examples/sample.md` for a complete Task entity example with all correct patterns.
 
 ### Step 6: Run Tests
 
@@ -175,7 +168,14 @@ Or run all tests:
 make test
 ```
 
-### Step 7: Summary
+### Step 7: Validate (Optional)
+
+Run the validation script to check all files were created correctly:
+```bash
+bash .claude/skills/add-entity-tests/scripts/validate.sh {entity_name}
+```
+
+### Step 8: Summary
 
 Provide a summary to the user:
 - List all test files created
@@ -188,43 +188,33 @@ Provide a summary to the user:
 
 - Always use **snake_case** for: file names, function names, variable names, fixture names
 - Always use **PascalCase** for: class names, model names
-- Always use **camelCase** for: API endpoint query parameters (only in integration-style router tests)
 - Follow pytest conventions:
   - Test function names start with `test_`
   - Use descriptive test names: `test_{method}` for success, `test_{method}__{condition}` for errors
   - Use Arrange-Act-Assert pattern with comments
   - Use `mocker.patch.object()` for mocking dependencies
-- All fixtures should use `scope="session"` for performance (not `scope="module"`)
+- All fixtures use `scope="session"` for performance (not `scope="module"`)
 - Use `@pytest.mark.filterwarnings("ignore::UserWarning")` for intentional validation errors
-- Router tests should mock the service layer (not data service)
-- Service tests should mock the data service layer
-- Use `Result[T, ErrorResult]` pattern:
-  - In service tests: Use `.is_ok()` and `.unwrap()` methods
-  - In router tests: Pattern match on Ok/Err results
+- Router tests mock the service layer (not data service)
+- Service tests mock the data service layer
 - Unit-style router tests:
   - Call router functions directly
   - Pass dependencies as parameters
   - Verify with `assert result == expected` and `service.method.assert_called_once_with()`
   - Check HTTPException details in error cases
-- Integration-style router tests:
-  - Use `TestClient` to make HTTP requests
-  - Use `is_expected_result_json()` helper for comparing JSON responses
-  - Verify HTTP status codes
 - All tests must have proper type hints for mypy compliance
 - Test both success and failure paths for each endpoint/method
-- Include validation error tests for malformed inputs
-- Service tests should verify filter objects (field, value, type) in detail
 
 ## Test Naming Conventions
 
 - Success cases: `test_{method_name}`
 - Error cases: `test_{method_name}__{error_condition}`
 - Examples:
-  - `test_get_users` - happy path
-  - `test_get_users__validation_error` - bad query params
-  - `test_get_user_by_id__user_not_found` - 404 case
-  - `test_create_user__validation_error` - invalid payload
-  - `test_update_user__conflict` - unique constraint violation
+  - `test_get_tasks` - happy path
+  - `test_get_tasks__validation_error` - bad query params
+  - `test_get_task_by_id__task_not_found` - 404 case
+  - `test_create_task__validation_error` - invalid payload
+  - `test_update_task__conflict` - unique constraint violation
 
 ## Fixture Naming Conventions
 
@@ -235,60 +225,16 @@ Provide a summary to the user:
 - List of models: `{entity_name}s` (plural)
 - Database entity: `{entity_name}_entity`
 - Error results: `{entity_name}_error_result_{error_type}`
-- Problem details: `{entity_name}_{error_type}` (e.g., `user_not_found`)
+- Problem details: `{entity_name}_{error_type}` (e.g., `task_not_found`)
 
 ## Error Handling
 
 If you encounter any errors during scaffolding:
-1. **FIRST**: Check `CORRECTIONS.md` for common errors and their fixes
-2. Ensure the entity files exist (run add-entity skill first if needed)
-3. Check imports are correct (proper paths and class names)
-4. Verify field names match between entity, models, and tests
-5. Check for typos in fixture names
-6. Ensure proper indentation (4 spaces)
-7. Verify all type hints are correct for mypy
-8. Check that mocker.patch.object targets the correct class
-
-## Reference Implementation
-
-**Use the Task entity tests as the canonical reference:**
-
-The following files contain the correct, validated patterns:
-- `src/tests/fixtures/task_fixtures.py` - Correct fixture patterns
-- `src/tests/unit/mappers/test_task_mapper.py` - Correct mapper test patterns
-- `src/tests/unit/services/test_task_service.py` - Correct service test patterns with filters
-- `src/tests/unit/routers/test_task.py` - Correct router test patterns (unit style)
-
-**When in doubt, copy the patterns from Task tests exactly.**
-
-## Validation Before Committing
-
-After generating all test files, validate:
-
-1. **Run each test file individually first** to catch errors early
-2. Check that fixture imports in conftest.py are correct
-3. Verify service fixtures are defined in conftest.py with session parameter
-4. Ensure all filter usage follows `field=EntityType.field_name` pattern
-5. Confirm ErrorResult uses `details` not `message`
-6. Verify ModelList uses only `items` and `total` fields
-7. Check that ErrorStatus enums are correct (NOT_FOUND_ERROR, BAD_REQUEST)
-
-## Post-Generation Checks
-
-Run these commands to verify tests pass:
-
-```bash
-# Test each layer individually
-PYTHONPATH=`pwd` uv run pytest src/tests/unit/mappers/test_{entity_name}_mapper.py -vv
-PYTHONPATH=`pwd` uv run pytest src/tests/unit/services/test_{entity_name}_service.py -vv
-PYTHONPATH=`pwd` uv run pytest src/tests/unit/routers/test_{entity_name}.py -vv
-
-# Then run all together
-PYTHONPATH=`pwd` uv run pytest src/tests/unit/mappers/test_{entity_name}_mapper.py src/tests/unit/services/test_{entity_name}_service.py src/tests/unit/routers/test_{entity_name}.py -vv
-```
-
-If any tests fail:
-1. Check the error message against CORRECTIONS.md
-2. Compare your implementation with Task tests
-3. Fix the issue and re-run
-4. Do NOT commit failing tests
+1. Ensure the entity files exist (run add-entity skill first if needed)
+2. Verify filters use `field=EntityType.field_name` (not `field_name="string"`)
+3. Check that `ErrorResult` uses `details` (not `message`)
+4. Check that `ErrorStatus` uses `NOT_FOUND_ERROR` / `BAD_REQUEST`
+5. Verify `ModelList` uses `items` and `total` only
+6. Confirm `get_by_page` is mocked (not `get_page`), returning `([entities], count)` tuple
+7. Check service fixtures are defined in `conftest.py` with real `session`
+8. Compare your implementation with `examples/sample.md` (Task entity canonical reference)
