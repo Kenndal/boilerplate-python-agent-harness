@@ -24,15 +24,18 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         dt = datetime.fromtimestamp(record.created, tz=UTC)
         timestamp = dt.strftime("%Y-%m-%dT%H:%M:%S") + f".{int(record.msecs):03d}Z"
-        return json.dumps(
-            {
-                "timestamp": timestamp,
-                "level": record.levelname,
-                "logger": record.name,
-                "message": record.getMessage(),
-                "trace_id": getattr(record, "correlation_id", "-"),
-            }
-        )
+        log_record = {
+            "timestamp": timestamp,
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "trace_id": getattr(record, "correlation_id", "-"),
+        }
+        if record.exc_info:
+            log_record["exc_info"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            log_record["stack_info"] = self.formatStack(record.stack_info)
+        return json.dumps(log_record)
 
 
 def get_logging_config(log_file_path: str, log_level: str = "INFO") -> dict[str, Any]:
@@ -66,11 +69,13 @@ def get_logging_config(log_file_path: str, log_level: str = "INFO") -> dict[str,
                 "stream": "ext://sys.stdout",
             },
             "file": {
-                "class": "logging.FileHandler",
+                "class": "logging.handlers.RotatingFileHandler",
                 "formatter": "json",
                 "filters": ["correlation_id"],
                 "filename": log_file_path,
                 "encoding": "utf-8",
+                "maxBytes": 10485760,  # 10MB
+                "backupCount": 3,
             },
         },
         "root": {
