@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 from pytest_mock import MockerFixture
 from result import Ok
 
@@ -8,33 +10,33 @@ from src.models.user import User
 from src.services.user_service import UserService
 
 
-def test_get_page_with_is_active_filter(
+async def test_get_page_with_is_active_filter(
     user_service: UserService,
     user_entity: UserEntity,
     user: User,
     mocker: MockerFixture,
 ) -> None:
     # Arrange
-    mocker.patch.object(UserDataService, "get_by_page", return_value=([user_entity], 1))
+    mocker.patch.object(UserDataService, "get_by_page", new_callable=AsyncMock, return_value=([user_entity], 1))
 
     # Act
-    result = user_service.get_page(page_number=1, page_size=10, omit_pagination=False, is_active=True)
+    result = await user_service.get_page(page_number=1, page_size=10, omit_pagination=False, is_active=True)
 
     # Assert
     assert result == Ok(ModelList[User](items=[user], total=1))
 
 
-def test_get_page_without_filters(
+async def test_get_page_without_filters(
     user_service: UserService,
     user_entity: UserEntity,
     user: User,
     mocker: MockerFixture,
 ) -> None:
     # Arrange
-    mocker.patch.object(UserDataService, "get_by_page", return_value=([user_entity], 1))
+    mocker.patch.object(UserDataService, "get_by_page", new_callable=AsyncMock, return_value=([user_entity], 1))
 
     # Act
-    result = user_service.get_page(page_number=1, page_size=10, omit_pagination=False)
+    result = await user_service.get_page(page_number=1, page_size=10, omit_pagination=False)
 
     # Assert
     assert result == Ok(ModelList[User](items=[user], total=1))

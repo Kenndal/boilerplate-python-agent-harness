@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -32,6 +33,7 @@ def test_get_users(
     mocker.patch.object(
         UserService,
         "get_page",
+        new_callable=AsyncMock,
         return_value=Ok(users),
     )
 
@@ -61,6 +63,7 @@ def test_get_user_by_id(
     mocker.patch.object(
         UserService,
         "get_by_id",
+        new_callable=AsyncMock,
         return_value=Ok(user),
     )
 
@@ -83,6 +86,7 @@ def test_get_user_by_id__user_not_found(
     mocker.patch.object(
         UserService,
         "get_by_id",
+        new_callable=AsyncMock,
         return_value=Err(user_error_result_not_found),
     )
 
@@ -101,7 +105,7 @@ def test_create_user(
     mocker: MockerFixture,
 ) -> None:
     # Arrange
-    mocker.patch.object(UserService, "create", return_value=Ok(user))
+    mocker.patch.object(UserService, "create", new_callable=AsyncMock, return_value=Ok(user))
 
     # Act
     response = client.post(USER_URL, json=user_create.model_dump())
@@ -127,7 +131,7 @@ def test_update_user(
     client: TestClient, user_id: UUID, user_update: UserUpdate, user: User, mocker: MockerFixture
 ) -> None:
     # Arrange
-    mocker.patch.object(UserService, "update", return_value=Ok(user))
+    mocker.patch.object(UserService, "update", new_callable=AsyncMock, return_value=Ok(user))
 
     # Act
     response = client.patch(f"{USER_URL}/{user_id}", json=user_update.model_dump())
@@ -146,7 +150,7 @@ def test_update_user__user_not_found(
     mocker: MockerFixture,
 ) -> None:
     # Arrange
-    mocker.patch.object(UserService, "update", return_value=Err(user_error_result_not_found))
+    mocker.patch.object(UserService, "update", new_callable=AsyncMock, return_value=Err(user_error_result_not_found))
 
     # Act
     response = client.patch(f"{USER_URL}/{user_id}", json=user_update.model_dump())
@@ -173,6 +177,7 @@ def test_delete_user(client: TestClient, user_id: UUID, mocker: MockerFixture) -
     mocker.patch.object(
         UserService,
         "delete",
+        new_callable=AsyncMock,
         return_value=Ok(None),
     )
     # Act
@@ -193,6 +198,7 @@ def test_delete_user__user_not_found(
     mocker.patch.object(
         UserService,
         "delete",
+        new_callable=AsyncMock,
         return_value=Err(user_error_result_not_found),
     )
 

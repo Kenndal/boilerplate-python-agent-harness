@@ -16,7 +16,7 @@ class UserService(BaseService[UserEntity, User, UserCreate, UserUpdate]):
     UPDATE_UNIQUE_VALIDATION_MSG = "{model_class} with given username or email already exists"
     model_class = User
 
-    def get_page(
+    async def get_page(
         self,
         page_number: int,
         page_size: int,
@@ -29,7 +29,7 @@ class UserService(BaseService[UserEntity, User, UserCreate, UserUpdate]):
         if is_active is not None:
             filters.append(EqualsFilter(field=UserEntity.is_active, value=is_active))
 
-        return super().get_page(
+        return await super().get_page(
             page_number=page_number,
             page_size=page_size,
             omit_pagination=omit_pagination,

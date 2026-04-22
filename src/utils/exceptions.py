@@ -8,3 +8,7 @@ class CrudIntegrityError(CrudError):
 
 class CrudUniqueValidationError(CrudIntegrityError):
     pass
+
+
+class AgentRunFailedError(Exception):
+    pass

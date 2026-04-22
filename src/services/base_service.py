@@ -42,7 +42,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
             model_class=self.model_class.__name__, id=str(entity_id)
         )
 
-    def get_page(
+    async def get_page(
         self,
         page_number: int,
         page_size: int,
@@ -51,7 +51,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
         **kwargs: Any,  # noqa: ANN401
     ) -> Result[ModelList[Model], ErrorResult]:
         try:
-            entities, total = self.data_service.get_by_page(
+            entities, total = await self.data_service.get_by_page(
                 page_number=page_number,
                 page_size=page_size,
                 omit_pagination=omit_pagination,
@@ -63,9 +63,9 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
         models = [self.model_class.model_validate(e) for e in entities]
         return Ok(ModelList[Model](items=models, total=total))
 
-    def get_by_id(self, entity_id: UUID, with_for_update: bool = False) -> Result[Model, ErrorResult]:
+    async def get_by_id(self, entity_id: UUID, with_for_update: bool = False) -> Result[Model, ErrorResult]:
         try:
-            entity = self.data_service.get_by_id(entity_id=entity_id, with_for_update=with_for_update)
+            entity = await self.data_service.get_by_id(entity_id=entity_id, with_for_update=with_for_update)
         except CrudError as e:
             return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
 
@@ -77,7 +77,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
             )
         return Ok(self.model_class.model_validate(entity))
 
-    def create(
+    async def create(
         self,
         model: CreateModel,
         mapper: ModelToEntityMapper[Entity, CreateModel],
@@ -86,7 +86,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
         **kwargs: Any,  # noqa: ANN401
     ) -> Result[Model, ErrorResult]:
         try:
-            entity = self.data_service.create(create_model=model, mapper=mapper, user_id=user_id)
+            entity = await self.data_service.create(create_model=model, mapper=mapper, user_id=user_id)
         except CrudUniqueValidationError as e:
             logger.error(str(e))
             return Err(
@@ -98,7 +98,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
             return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
         return Ok(self.model_class.model_validate(entity))
 
-    def update(
+    async def update(
         self,
         entity_id: UUID,
         model: UpdateModel,
@@ -107,7 +107,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
         **kwargs: Any,  # noqa: ANN401
     ) -> Result[Model, ErrorResult]:
         try:
-            entity_exists = self.data_service.entity_exists(entity_id=entity_id)
+            entity_exists = await self.data_service.entity_exists(entity_id=entity_id)
         except CrudError as e:
             return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
 
@@ -119,7 +119,7 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
             )
 
         try:
-            entity = self.data_service.update(entity_id=entity_id, update_model=model, user_id=user_id)
+            entity = await self.data_service.update(entity_id=entity_id, update_model=model, user_id=user_id)
         except CrudUniqueValidationError as e:
             logger.error(str(e))
             return Err(
@@ -133,9 +133,9 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
 
         return Ok(self.model_class.model_validate(entity))
 
-    def delete(self, entity_id: UUID) -> Result[None, ErrorResult]:
+    async def delete(self, entity_id: UUID) -> Result[None, ErrorResult]:
         try:
-            entity_exists = self.data_service.entity_exists(entity_id=entity_id)
+            entity_exists = await self.data_service.entity_exists(entity_id=entity_id)
         except CrudError as e:
             return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
 
@@ -147,15 +147,15 @@ class BaseService[Entity: Base, Model: BaseModel, CreateModel: BaseModel, Update
             )
 
         try:
-            self.data_service.delete(entity_id=entity_id)
+            await self.data_service.delete(entity_id=entity_id)
         except CrudError as e:
             return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
 
         return Ok(None)
 
-    def entity_exists(self, entity_id: UUID) -> Result[None, ErrorResult]:
+    async def entity_exists(self, entity_id: UUID) -> Result[None, ErrorResult]:
         try:
-            entity_exists = self.data_service.entity_exists(entity_id=entity_id)
+            entity_exists = await self.data_service.entity_exists(entity_id=entity_id)
         except CrudError as e:
             return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
 

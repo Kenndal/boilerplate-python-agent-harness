@@ -22,7 +22,7 @@ from starlette.status import (
 
 from src.api_server.helpers.utils import build_validation_error_detail
 from src.api_server.responses import response_400, response_401, response_403, response_500
-from src.api_server.routers import user
+from src.api_server.routers import agent, user
 from src.config.config import config
 from src.config.logging_config import get_logging_config
 from src.constants import VERSION_PREFIX
@@ -46,6 +46,7 @@ def build_app() -> FastAPI:
 
     # Add routers
     _app.include_router(user.router, tags=["users"], prefix=f"/{VERSION_PREFIX}")
+    _app.include_router(agent.router, tags=["agents"], prefix=f"/{VERSION_PREFIX}")
 
     _app.add_middleware(
         CORSMiddleware,  # ty: ignore[invalid-argument-type]

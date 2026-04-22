@@ -5,6 +5,8 @@ VERSION_PREFIX = "v1"
 
 # API Prefix
 USER_PREFIX = "users"
+AGENTS_PREFIX = "agents"
+AGENT_SESSIONS_PREFIX = "sessions"
 
 # Query params
 PAGE_NUMBER = "pageNumber"

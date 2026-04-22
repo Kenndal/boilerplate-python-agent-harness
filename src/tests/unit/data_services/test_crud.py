@@ -1,14 +1,16 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
 from pydantic import BaseModel
 import pytest
+import pytest_asyncio
 from pytest_mock import MockerFixture
-from sqlalchemy import StaticPool, create_engine, delete
+from sqlalchemy import StaticPool, delete
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from src.data_services.crud import Crud
 from src.data_services.filters import ContainsFilter, EqualsFilter, NotEqualsFilter
@@ -69,26 +71,22 @@ def fake_mapper_unique_violation_error(model: CreateModel, user_id: str) -> Enti
     raise IntegrityError(statement="", params=[], orig=psycopg.errors.UniqueViolation())
 
 
-@pytest.fixture(scope="module")
-def session_maker() -> sessionmaker[Session]:
-    engine = create_engine(
-        "sqlite://",
+@pytest_asyncio.fixture
+async def session() -> AsyncGenerator[AsyncSession, Any]:
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(engine)
-    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-@pytest.fixture(scope="module")
-def session(session_maker: sessionmaker[Session]) -> Generator[Session, Any, None]:
-    db = None
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    session_maker = async_sessionmaker(autocommit=False, autoflush=False, bind=engine, expire_on_commit=False)
+    db = session_maker()
     try:
-        db = session_maker()
         yield db
     finally:
-        if db:
-            db.close()
+        await db.close()
+        await engine.dispose()
 
 
 @pytest.fixture
@@ -111,26 +109,25 @@ def entity(create_model: CreateModel, user_id: str) -> Entity:
     )
 
 
-@pytest.fixture
-def setup_without_created_entity(session: Session, entity: Entity) -> Generator[None, Any, None]:
+@pytest_asyncio.fixture
+async def setup_without_created_entity(session: AsyncSession, entity: Entity) -> AsyncGenerator[None, Any]:
     try:
         yield
     finally:
         stmt = delete(Entity)
-        session.execute(stmt)
-        session.commit()
+        await session.execute(stmt)
+        await session.commit()
 
 
-@pytest.fixture
-def setup_with_created_entity(session: Session, entity: Entity, setup_without_created_entity: None) -> None:
+@pytest_asyncio.fixture
+async def setup_with_created_entity(session: AsyncSession, entity: Entity, setup_without_created_entity: None) -> None:
     session.add(entity)
-    session.commit()
-    return
+    await session.commit()
 
 
-@pytest.fixture
-def setup_with_created_multiple_entities(
-    session: Session,
+@pytest_asyncio.fixture
+async def setup_with_created_multiple_entities(
+    session: AsyncSession,
     entity: Entity,
     create_model: CreateModel,
     setup_without_created_entity: None,
@@ -149,40 +146,39 @@ def setup_with_created_multiple_entities(
             )
         )
     session.add_all(entities)
-    session.commit()
-    return
+    await session.commit()
 
 
 @pytest.fixture
-def crud(session: Session) -> Crud[Entity, CreateModel, UpdateModel]:
+def crud(session: AsyncSession) -> Crud[Entity, CreateModel, UpdateModel]:
     return Crud[Entity, CreateModel, UpdateModel](session=session, entity_type=Entity)
 
 
-def test_entity_exists(
+async def test_entity_exists(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_entity: None,
 ) -> None:
     # Act
-    result = crud.entity_exists(ENTITY_ID)
+    result = await crud.entity_exists(ENTITY_ID)
 
     # Assert
     assert result is True
 
 
-def test_entity_exists__not_found(
+async def test_entity_exists__not_found(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_without_created_entity: None,
 ) -> None:
     # Act
-    result = crud.entity_exists(ENTITY_ID)
+    result = await crud.entity_exists(ENTITY_ID)
 
     # Assert
     assert result is False
 
 
-def test_exists__crud_exception(
+async def test_exists__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -192,38 +188,39 @@ def test_exists__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.entity_exists(ENTITY_ID)
+        await crud.entity_exists(ENTITY_ID)
 
     # Assert
     assert str(e.value) == f"Failed to check if entity Entity with id {ENTITY_ID} exists"
 
 
-def test_get_one(
+async def test_get_one(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_entity: None,
 ) -> None:
     # Act
-    result = crud._get_one(ENTITY_ID)
+    result = await crud._get_one(ENTITY_ID)
 
     # Assert
-    assert result == entity
+    assert result.id == entity.id
+    assert result.super_name == entity.super_name
 
 
-def test_get_one__not_found(
+async def test_get_one__not_found(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_without_created_entity: None,
 ) -> None:
     # Act
     with pytest.raises(CrudError) as e:
-        crud._get_one(ENTITY_ID)
+        await crud._get_one(ENTITY_ID)
 
     # Assert
     assert str(e.value) == f"Failed to retrieve Entity with id {ENTITY_ID}"
 
 
-def test_get_one__crud_exception(
+async def test_get_one__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -233,37 +230,39 @@ def test_get_one__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud._get_one(ENTITY_ID)
+        await crud._get_one(ENTITY_ID)
 
     # Assert
     assert str(e.value) == f"Failed to retrieve Entity with id {ENTITY_ID}"
 
 
-def test_get_by_id(
+async def test_get_by_id(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_entity: None,
 ) -> None:
     # Act
-    result = crud.get_by_id(ENTITY_ID)
+    result = await crud.get_by_id(ENTITY_ID)
 
     # Assert
-    assert result == entity
+    assert result is not None
+    assert result.id == entity.id
+    assert result.super_name == entity.super_name
 
 
-def test_get_by_id__not_found(
+async def test_get_by_id__not_found(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_without_created_entity: None,
 ) -> None:
     # Act
-    result = crud.get_by_id(ENTITY_ID)
+    result = await crud.get_by_id(ENTITY_ID)
 
     # Assert
     assert result is None
 
 
-def test_get_by_id__crud_exception(
+async def test_get_by_id__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -273,20 +272,20 @@ def test_get_by_id__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.get_by_id(ENTITY_ID)
+        await crud.get_by_id(ENTITY_ID)
 
     # Assert
     assert str(e.value) == f"Failed to retrieve Entity with id {ENTITY_ID}"
 
 
-def test_create(
+async def test_create(
     crud: Crud[Entity, CreateModel, UpdateModel],
     create_model: CreateModel,
     setup_without_created_entity: None,
     fake_user_id: str,
 ) -> None:
     # Act
-    result = crud.create(create_model, mapper, fake_user_id)
+    result = await crud.create(create_model, mapper, fake_user_id)
 
     # Assert
     assert result.id == ENTITY_ID
@@ -294,7 +293,7 @@ def test_create(
     assert result.base == create_model.base
 
 
-def test_create__crud_unique_validation_error(
+async def test_create__crud_unique_validation_error(
     crud: Crud[Entity, CreateModel, UpdateModel],
     create_model: CreateModel,
     setup_without_created_entity: None,
@@ -302,13 +301,13 @@ def test_create__crud_unique_validation_error(
 ) -> None:
     # Act
     with pytest.raises(CrudUniqueValidationError) as e:
-        crud.create(create_model, fake_mapper_unique_violation_error, fake_user_id)
+        await crud.create(create_model, fake_mapper_unique_violation_error, fake_user_id)
 
     # Assert
     assert str(e.value) == f"Failed to create new entity Entity with params: {create_model=} due to IntegrityError"
 
 
-def test_create__crud_integrity_exception(
+async def test_create__crud_integrity_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     create_model: CreateModel,
     setup_without_created_entity: None,
@@ -316,13 +315,13 @@ def test_create__crud_integrity_exception(
 ) -> None:
     # Act
     with pytest.raises(CrudIntegrityError) as e:
-        crud.create(create_model, fake_mapper_integrity_error, fake_user_id)
+        await crud.create(create_model, fake_mapper_integrity_error, fake_user_id)
 
     # Assert
     assert str(e.value) == f"Failed to create new entity Entity with params: {create_model=} due to IntegrityError"
 
 
-def test_create__crud_exception(
+async def test_create__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     create_model: CreateModel,
     setup_without_created_entity: None,
@@ -330,13 +329,13 @@ def test_create__crud_exception(
 ) -> None:
     # Act
     with pytest.raises(CrudError) as e:
-        crud.create(create_model, fake_mapper_exception, fake_user_id)
+        await crud.create(create_model, fake_mapper_exception, fake_user_id)
 
     # Assert
     assert str(e.value) == f"Failed to create new entity Entity with params: {create_model=}"
 
 
-def test_update(
+async def test_update(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     update_model: UpdateModel,
@@ -344,7 +343,7 @@ def test_update(
     fake_user_id: str,
 ) -> None:
     # Act
-    result = crud.update(ENTITY_ID, update_model, fake_user_id)
+    result = await crud.update(ENTITY_ID, update_model, fake_user_id)
 
     # Assert
     assert result.id == ENTITY_ID
@@ -352,7 +351,7 @@ def test_update(
     assert result.super_name == entity.super_name
 
 
-def test_update__crud_unique_validation_error(
+async def test_update__crud_unique_validation_error(
     crud: Crud[Entity, CreateModel, UpdateModel],
     update_model: UpdateModel,
     mocker: MockerFixture,
@@ -367,7 +366,7 @@ def test_update__crud_unique_validation_error(
 
     # Act
     with pytest.raises(CrudIntegrityError) as e:
-        crud.update(ENTITY_ID, update_model, fake_user_id)
+        await crud.update(ENTITY_ID, update_model, fake_user_id)
 
     # Assert
     assert (
@@ -375,7 +374,7 @@ def test_update__crud_unique_validation_error(
     )
 
 
-def test_update__crud_integrity_exception(
+async def test_update__crud_integrity_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     update_model: UpdateModel,
     mocker: MockerFixture,
@@ -390,7 +389,7 @@ def test_update__crud_integrity_exception(
 
     # Act
     with pytest.raises(CrudIntegrityError) as e:
-        crud.update(ENTITY_ID, update_model, fake_user_id)
+        await crud.update(ENTITY_ID, update_model, fake_user_id)
 
     # Assert
     assert (
@@ -398,7 +397,7 @@ def test_update__crud_integrity_exception(
     )
 
 
-def test_update__crud_exception(
+async def test_update__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     update_model: UpdateModel,
     mocker: MockerFixture,
@@ -410,26 +409,26 @@ def test_update__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.update(ENTITY_ID, update_model, fake_user_id)
+        await crud.update(ENTITY_ID, update_model, fake_user_id)
 
     # Assert
     assert str(e.value) == f"Failed to update entity Entity {ENTITY_ID} with params: {update_model=}"
 
 
-def test_delete(
+async def test_delete(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_entity: None,
 ) -> None:
     # Act
-    crud.delete(ENTITY_ID)
-    result = crud.get_by_id(ENTITY_ID)
+    await crud.delete(ENTITY_ID)
+    result = await crud.get_by_id(ENTITY_ID)
 
     # Assert
     assert result is None
 
 
-def test_delete__crud_exception(
+async def test_delete__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -439,14 +438,14 @@ def test_delete__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.delete(ENTITY_ID)
+        await crud.delete(ENTITY_ID)
 
     # Assert
     assert str(e.value) == f"Failed to delete entity Entity {ENTITY_ID}"
 
 
 @pytest.mark.parametrize(("base", "expected_total"), [("base", 0), ("ENTITY_NAME", 4)])
-def test_condition_delete(
+async def test_condition_delete(
     crud: Crud[Entity, CreateModel, UpdateModel],
     setup_with_created_multiple_entities: None,
     base: str,
@@ -456,14 +455,14 @@ def test_condition_delete(
     f = EqualsFilter(Entity.base, base)
 
     # Act
-    crud.condition_delete(filters=[f])
-    _, total = crud.get_by_page(omit_pagination=True)
+    await crud.condition_delete(filters=[f])
+    _, total = await crud.get_by_page(omit_pagination=True)
 
     # Assert
     assert total is expected_total
 
 
-def test_condition_delete__crud_exception(
+async def test_condition_delete__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -475,7 +474,7 @@ def test_condition_delete__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.condition_delete(filters=[f, f2])
+        await crud.condition_delete(filters=[f, f2])
 
     # Assert
     assert (
@@ -484,16 +483,17 @@ def test_condition_delete__crud_exception(
     )
 
 
-def test_get_by_page(
+async def test_get_by_page(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_entity: None,
 ) -> None:
     # Act
-    result, total = crud.get_by_page()
+    result, total = await crud.get_by_page()
 
     # Assert
-    assert result == [entity]
+    assert len(result) == 1
+    assert result[0].id == entity.id
     assert total == 1
 
 
@@ -501,7 +501,7 @@ def test_get_by_page(
     ("page_number", "page_size", "omit_pagination", "expected_count"),
     [(1, 1, False, 1), (1, 2, False, 2), (1, 1, True, 4)],
 )
-def test_get_by_page__params(
+async def test_get_by_page__params(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_multiple_entities: None,
@@ -511,20 +511,20 @@ def test_get_by_page__params(
     expected_count: int,
 ) -> None:
     # Act
-    result, total = crud.get_by_page(page_number, page_size, omit_pagination)
+    result, total = await crud.get_by_page(page_number, page_size, omit_pagination)
 
     # Assert
     assert len(result) == expected_count
     assert total == 4
 
 
-def test_get_by_page__page_number(
+async def test_get_by_page__page_number(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_multiple_entities: None,
 ) -> None:
     # Act
-    result, total = crud.get_by_page(4, 1)
+    result, total = await crud.get_by_page(4, 1)
 
     # Assert
     assert len(result) == 1
@@ -532,7 +532,7 @@ def test_get_by_page__page_number(
     assert total == 4
 
 
-def test_get_by_page__with_equals_filter(
+async def test_get_by_page__with_equals_filter(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_multiple_entities: None,
@@ -541,32 +541,33 @@ def test_get_by_page__with_equals_filter(
     f = EqualsFilter(Entity.id, ENTITY_ID)
 
     # Act
-    result, total = crud.get_by_page(filters=[f])
+    result, total = await crud.get_by_page(filters=[f])
 
     # Assert
-    assert result == [entity]
+    assert len(result) == 1
+    assert result[0].id == entity.id
     assert total == 1
 
 
-def test_get_by_page__with_not_equals_filter(
+async def test_get_by_page__with_not_equals_filter(
     crud: Crud[Entity, CreateModel, UpdateModel],
     create_model: CreateModel,
     setup_without_created_entity: None,
     fake_user_id: str,
 ) -> None:
     # Arrange
-    crud.create(create_model, mapper, fake_user_id)
+    await crud.create(create_model, mapper, fake_user_id)
     f = NotEqualsFilter(Entity.id, ENTITY_ID)
 
     # Act
-    result, total = crud.get_by_page(filters=[f])
+    result, total = await crud.get_by_page(filters=[f])
 
     # Assert
     assert result == []
     assert total == 0
 
 
-def test_get_by_page__with_contains_filter(
+async def test_get_by_page__with_contains_filter(
     crud: Crud[Entity, CreateModel, UpdateModel],
     create_model: CreateModel,
     setup_with_created_multiple_entities: None,
@@ -575,7 +576,7 @@ def test_get_by_page__with_contains_filter(
     f = ContainsFilter(Entity.super_name, "super_name-")
 
     # Act
-    result, total = crud.get_by_page(filters=[f])
+    result, total = await crud.get_by_page(filters=[f])
 
     # Assert
     assert len(result) == 3
@@ -612,7 +613,7 @@ def test_get_by_page__with_contains_filter(
         ),
     ],
 )
-def test_get_by_page__with_sorting(
+async def test_get_by_page__with_sorting(
     crud: Crud[Entity, CreateModel, UpdateModel],
     entity: Entity,
     setup_with_created_multiple_entities: None,
@@ -621,7 +622,7 @@ def test_get_by_page__with_sorting(
     expected_result: list[str],
 ) -> None:
     # Act
-    result, total = crud.get_by_page(sort_by=sort_by, sort_direction=sort_direction)
+    result, total = await crud.get_by_page(sort_by=sort_by, sort_direction=sort_direction)
 
     sorted_result = [entity.super_name for entity in result]
 
@@ -630,7 +631,7 @@ def test_get_by_page__with_sorting(
     assert total == 4
 
 
-def test_get_by_page__crud_exception(
+async def test_get_by_page__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -640,7 +641,7 @@ def test_get_by_page__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.get_by_page()
+        await crud.get_by_page()
 
     # Assert
     assert str(e.value) == (
@@ -649,7 +650,7 @@ def test_get_by_page__crud_exception(
 
 
 @pytest.mark.parametrize(("super_name", "expected_result"), [(ENTITY_NAME, True), ("ENTITY_NAME", False)])
-def test_condition_exists(
+async def test_condition_exists(
     crud: Crud[Entity, CreateModel, UpdateModel],
     setup_with_created_multiple_entities: None,
     super_name: str,
@@ -659,13 +660,13 @@ def test_condition_exists(
     f = EqualsFilter(Entity.super_name, super_name)
 
     # Act
-    result = crud.condition_exists(filters=[f])
+    result = await crud.condition_exists(filters=[f])
 
     # Assert
     assert result is expected_result
 
 
-def test_condition_exists__crud_exception(
+async def test_condition_exists__crud_exception(
     crud: Crud[Entity, CreateModel, UpdateModel],
     mocker: MockerFixture,
     setup_without_created_entity: None,
@@ -677,7 +678,7 @@ def test_condition_exists__crud_exception(
 
     # Act
     with pytest.raises(CrudError) as e:
-        crud.condition_exists(filters=[f, f2])
+        await crud.condition_exists(filters=[f, f2])
 
     # Assert
     assert (

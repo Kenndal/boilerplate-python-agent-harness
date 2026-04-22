@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from pydantic.alias_generators import to_snake
 from sqlalchemy import Delete, Exists, Select, asc, delete, desc, exists, func, select, update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import DeclarativeBase
 
 from src.constants import DEFAULT_PAGE_NUMBER, DEFAULT_PAGE_SIZE
 from src.data_services.filters import Filter
@@ -37,49 +38,53 @@ class ModelToEntityMapper[EntityType: DeclarativeBase, CreateModel: BaseModel](P
 
 @dataclass
 class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseModel]:
-    session: Session
+    session: AsyncSession
     entity_type: type[Entity]
 
     @property
     def _entity_name(self) -> str:
         return self.entity_type.__name__
 
-    def entity_exists(self, entity_id: UUID) -> bool:
+    async def entity_exists(self, entity_id: UUID) -> bool:
         try:
             stmt = select(exists().where(self.entity_type.id == entity_id))  # type: ignore[attr-defined]
-            return bool(self.session.execute(stmt).unique().scalar())
+            result = await self.session.execute(stmt)
+            return bool(result.unique().scalar())
         except Exception as e:
             error_msg = f"Failed to check if entity {self._entity_name} with id {entity_id} exists"
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def condition_exists(self, filters: Sequence[Filter]) -> bool:
+    async def condition_exists(self, filters: Sequence[Filter]) -> bool:
         try:
             exists_stmt = exists()
             for f in filters:
                 exists_stmt = cast(Exists, f.apply(exists_stmt))
             stmt = select(exists_stmt)
-            return bool(self.session.execute(stmt).unique().scalar())
+            result = await self.session.execute(stmt)
+            return bool(result.unique().scalar())
         except Exception as e:
             error_msg = f"Failed to check if entities {self._entity_name} exists for conditions {filters}"
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def _get_one(self, entity_id: UUID) -> Entity:
+    async def _get_one(self, entity_id: UUID) -> Entity:
         try:
             stmt = select(self.entity_type).where(self.entity_type.id == entity_id)  # type: ignore[attr-defined]
-            return self.session.scalars(stmt).unique().one()
+            result = await self.session.scalars(stmt)
+            return result.unique().one()
         except Exception as e:
             error_msg = f"Failed to retrieve {self._entity_name} with id {entity_id}"
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def get_by_id(self, entity_id: UUID, with_for_update: bool = False) -> Entity | None:
+    async def get_by_id(self, entity_id: UUID, with_for_update: bool = False) -> Entity | None:
         try:
             stmt = select(self.entity_type).where(self.entity_type.id == entity_id)  # type: ignore[attr-defined]
             if with_for_update:
                 stmt = stmt.with_for_update()
-            return self.session.scalars(stmt).unique().first()
+            result = await self.session.scalars(stmt)
+            return result.unique().first()
         except Exception as e:
             error_msg = f"Failed to retrieve {self._entity_name} with id {entity_id}"
             logger.error(f"{error_msg}, {str(e)}")
@@ -108,7 +113,7 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
             stmt = stmt.order_by(sort_dir(sort_by_key))
         return stmt, count_stmt
 
-    def get_by_page(
+    async def get_by_page(
         self,
         page_number: int = DEFAULT_PAGE_NUMBER,
         page_size: int = DEFAULT_PAGE_SIZE,
@@ -123,7 +128,9 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
             stmt, count_stmt = self._apply_params(
                 stmt, count_stmt, page_number, page_size, omit_pagination, filters, sort_by, sort_direction
             )
-            return list(self.session.scalars(stmt).unique().all()), self.session.scalar(count_stmt) or 0
+            items_result = await self.session.scalars(stmt)
+            total = await self.session.scalar(count_stmt)
+            return list(items_result.unique().all()), total or 0
         except Exception as e:
             error_msg = (
                 f"Failed to retrieve multiple entities {self._entity_name} "
@@ -132,7 +139,7 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def _create(
+    async def _create(
         self,
         create_model: CreateModel,
         mapper: ModelToEntityMapper[Entity, CreateModel],
@@ -142,14 +149,14 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
     ) -> Entity:
         new_entity = mapper(model=create_model, user_id=user_id)
         self.session.add(new_entity)
-        self.session.flush()
+        await self.session.flush()
         return new_entity
 
-    def create(
+    async def create(
         self, create_model: CreateModel, mapper: ModelToEntityMapper[Entity, CreateModel], user_id: str
     ) -> Entity:
         try:
-            return self._create(create_model, mapper, user_id)
+            return await self._create(create_model, mapper, user_id)
         except IntegrityError as e:
             error_msg = (
                 f"Failed to create new entity {self._entity_name} with params: {create_model=} due to IntegrityError"
@@ -163,7 +170,7 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def _update(
+    async def _update(
         self,
         entity_id: UUID,
         update_model: UpdateModel,
@@ -176,14 +183,14 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
             .where(self.entity_type.id == entity_id)  # type: ignore[attr-defined]
             .values(last_modified_by_user_id=user_id, **update_model.model_dump(exclude_unset=True))
         )
-        self.session.execute(stmt)
-        self.session.flush()
-        return self._get_one(entity_id)
+        await self.session.execute(stmt)
+        await self.session.flush()
+        return await self._get_one(entity_id)
 
-    def update(self, entity_id: UUID, update_model: UpdateModel, user_id: str) -> Entity:
+    async def update(self, entity_id: UUID, update_model: UpdateModel, user_id: str) -> Entity:
         try:
             logger.info(f"{update_model.model_dump(exclude_unset=True)=}")
-            return self._update(entity_id, update_model, user_id)
+            return await self._update(entity_id, update_model, user_id)
         except IntegrityError as e:
             error_msg = (
                 f"Failed to update entity {self._entity_name} {entity_id} "
@@ -198,23 +205,23 @@ class Crud[Entity: DeclarativeBase, CreateModel: BaseModel, UpdateModel: BaseMod
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def delete(self, entity_id: UUID) -> None:
+    async def delete(self, entity_id: UUID) -> None:
         try:
             stmt = delete(self.entity_type).where(self.entity_type.id == entity_id)  # type: ignore[attr-defined]
-            self.session.execute(stmt)
-            self.session.flush()
+            await self.session.execute(stmt)
+            await self.session.flush()
         except Exception as e:
             error_msg = f"Failed to delete entity {self._entity_name} {entity_id}"
             logger.error(f"{error_msg}, {str(e)}")
             raise CrudError(error_msg) from e
 
-    def condition_delete(self, filters: Sequence[Filter]) -> None:
+    async def condition_delete(self, filters: Sequence[Filter]) -> None:
         try:
             stmt = delete(self.entity_type)
             for f in filters:
                 stmt = cast(Delete, f.apply(stmt))
-            self.session.execute(stmt)
-            self.session.flush()
+            await self.session.execute(stmt)
+            await self.session.flush()
         except Exception as e:
             error_msg = f"Failed to delete entities {self._entity_name} for conditions {filters}"
             logger.error(f"{error_msg}, {str(e)}")
