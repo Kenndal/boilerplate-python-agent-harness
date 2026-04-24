@@ -40,10 +40,10 @@ domain_pattern = r"http:\/\/localhost:3000"  # TODO: update with real domains
 @asynccontextmanager
 async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
     http_client = build_openrouter_http_client()
-    model = build_openrouter_model(http_client=http_client)
-    app.state.default_agent = build_sample_agent(model=model)
-    app.state.openrouter_http_client = http_client
     try:
+        model = build_openrouter_model(model_name=config.LLM_DEFAULT_MODEL, http_client=http_client)
+        app.state.default_agent = build_sample_agent(model=model)
+        app.state.openrouter_http_client = http_client
         yield
     finally:
         await app.state.openrouter_http_client.aclose()
