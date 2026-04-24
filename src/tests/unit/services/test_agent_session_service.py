@@ -51,9 +51,7 @@ async def test_get_by_id_for_user_returns_session_when_owner_matches(
         return_value=Ok(agent_session),
     )
 
-    result = await agent_session_service.get_session_by_id_for_user(
-        agent_session.id, agent_session.owner_user_id
-    )
+    result = await agent_session_service.get_session_by_id_for_user(agent_session.id, agent_session.owner_user_id)
 
     assert result == Ok(agent_session)
 
@@ -70,9 +68,7 @@ async def test_get_by_id_for_user_returns_not_found_on_owner_mismatch(
         return_value=Ok(foreign_agent_session),
     )
 
-    result = await agent_session_service.get_session_by_id_for_user(
-        foreign_agent_session.id, "some-other-user"
-    )
+    result = await agent_session_service.get_session_by_id_for_user(foreign_agent_session.id, "some-other-user")
 
     assert isinstance(result, Err)
     assert result.err_value.status == ErrorStatus.NOT_FOUND_ERROR
@@ -91,9 +87,7 @@ async def test_get_by_id_for_user_returns_not_found_when_inactive(
         return_value=Ok(inactive),
     )
 
-    result = await agent_session_service.get_session_by_id_for_user(
-        inactive.id, inactive.owner_user_id
-    )
+    result = await agent_session_service.get_session_by_id_for_user(inactive.id, inactive.owner_user_id)
 
     assert isinstance(result, Err)
     assert result.err_value.status == ErrorStatus.NOT_FOUND_ERROR
@@ -160,9 +154,7 @@ async def test_get_with_messages_for_user_propagates_session_error(
         return_value=Err(err),
     )
 
-    result = await agent_session_service.get_session_with_messages_for_user(
-        uuid4(), "system"
-    )
+    result = await agent_session_service.get_session_with_messages_for_user(uuid4(), "system")
 
     assert result == Err(err)
 

@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import cast
 from unittest.mock import AsyncMock
@@ -35,15 +36,21 @@ def fake_user_id() -> str:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
+def client() -> Iterator[TestClient]:
+    if not hasattr(app.state, "default_agent"):
+        app.state.default_agent = AsyncMock()
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 @pytest.fixture(scope="session")
 def audit(user_id: str) -> BaseAudit:
     now = datetime.now(tz=UTC)
     return BaseAudit(
-        created_date=now, last_modified_date=now, created_by_user_id=user_id, last_modified_by_user_id=user_id
+        created_date=now,
+        last_modified_date=now,
+        created_by_user_id=user_id,
+        last_modified_by_user_id=user_id,
     )
 
 
@@ -89,5 +96,7 @@ def agent_session_service(
 
 
 @pytest.fixture
-def agent_message_service(agent_message_data_service: AgentMessageDataService) -> AgentMessageService:
+def agent_message_service(
+    agent_message_data_service: AgentMessageDataService,
+) -> AgentMessageService:
     return AgentMessageService(data_service=agent_message_data_service)

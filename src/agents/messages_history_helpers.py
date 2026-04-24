@@ -245,9 +245,7 @@ def _short_summary(value: Any) -> str:  # noqa: ANN401
         return str(value)[:1024]
 
 
-def _resolve_tool_call_id(
-    pending_tool_call_ids: dict[str, list[str]], tool_name: str, sequence: int
-) -> str:
+def _resolve_tool_call_id(pending_tool_call_ids: dict[str, list[str]], tool_name: str, sequence: int) -> str:
     ids = pending_tool_call_ids.get(tool_name)
     if ids:
         return ids.pop(0)

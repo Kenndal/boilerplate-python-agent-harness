@@ -23,7 +23,6 @@ from starlette.status import (
 from src.agents.deps import AgentDeps
 from src.models.enums.error_status import ErrorStatus
 from src.models.error_result import ErrorResult
-from src.models.tool_execution_error import ToolExecutionError
 
 logger = logging.getLogger(__name__)
 
@@ -48,24 +47,36 @@ def _map_pai_error(exc: Exception) -> ErrorResult:
     Keeps higher layers ignorant of provider-specific error types; everything downstream
     pattern-matches on ErrorStatus.
     """
-    if isinstance(exc, ToolExecutionError):
-        return ErrorResult(status=exc.status, details=exc.to_error_details())
     if isinstance(exc, ModelHTTPError):
         if exc.status_code in {HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN}:
-            return ErrorResult(status=ErrorStatus.BAD_REQUEST, details=f"LLM auth error: {exc}")
+            return ErrorResult(
+                status=ErrorStatus.BAD_REQUEST, details=f"LLM auth error: {exc}"
+            )
         if exc.status_code == HTTP_429_TOO_MANY_REQUESTS:
-            return ErrorResult(status=ErrorStatus.CONFLICT, details=f"LLM rate limited: {exc}")
+            return ErrorResult(
+                status=ErrorStatus.CONFLICT, details=f"LLM rate limited: {exc}"
+            )
         return ErrorResult(
             status=ErrorStatus.INTERNAL_ERROR,
             details=f"LLM HTTP error {exc.status_code}: {exc}",
         )
     if isinstance(exc, UsageLimitExceeded):
-        return ErrorResult(status=ErrorStatus.BAD_REQUEST, details=f"Usage limit exceeded: {exc}")
-    if isinstance(exc, (UnexpectedModelBehavior, AgentRunError, ModelAPIError, UserError)):
-        return ErrorResult(status=ErrorStatus.INTERNAL_ERROR, details=f"Agent run failed: {exc}")
+        return ErrorResult(
+            status=ErrorStatus.BAD_REQUEST, details=f"Usage limit exceeded: {exc}"
+        )
+    if isinstance(
+        exc, (UnexpectedModelBehavior, AgentRunError, ModelAPIError, UserError)
+    ):
+        return ErrorResult(
+            status=ErrorStatus.INTERNAL_ERROR, details=f"Agent run failed: {exc}"
+        )
     if isinstance(exc, TimeoutError):
-        return ErrorResult(status=ErrorStatus.INTERNAL_ERROR, details="LLM request timed out")
-    return ErrorResult(status=ErrorStatus.INTERNAL_ERROR, details=f"Unexpected agent error: {exc}")
+        return ErrorResult(
+            status=ErrorStatus.INTERNAL_ERROR, details="LLM request timed out"
+        )
+    return ErrorResult(
+        status=ErrorStatus.INTERNAL_ERROR, details=f"Unexpected agent error: {exc}"
+    )
 
 
 class AgentRunner:
@@ -98,24 +109,13 @@ class AgentRunner:
             )
         except Exception as e:
             mapped = _map_pai_error(e)
-            if isinstance(e, ToolExecutionError):
-                logger.warning(
-                    "Agent tool execution failed",
-                    extra={
-                        "tool_name": e.tool_name,
-                        "tool_code": e.code,
-                        "tool_details": e.details,
-                        "error_status": mapped.status.value,
-                    },
-                )
-            else:
-                logger.exception(
-                    "Agent run failed",
-                    extra={
-                        "error_type": type(e).__name__,
-                        "error_status": mapped.status.value,
-                    },
-                )
+            logger.exception(
+                "Agent run failed",
+                extra={
+                    "error_type": type(e).__name__,
+                    "error_status": mapped.status.value,
+                },
+            )
             return Err(mapped)
 
         usage = result.usage()

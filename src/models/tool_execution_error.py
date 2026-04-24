@@ -1,18 +1,22 @@
-from dataclasses import dataclass, field
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 from src.models.enums.error_status import ErrorStatus
 
 
-@dataclass(slots=True)
-class ToolExecutionError(Exception):
+class ToolExecutionError(BaseModel):
     """Typed exception for tool failures with structured diagnostics."""
 
     tool_name: str
     status: ErrorStatus
     message: str
     code: str = "tool_execution_failed"
-    details: dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = Field(default_factory=dict)
 
-    def to_error_details(self) -> str:
-        return f"Tool `{self.tool_name}` failed [{self.code}]: {self.message}"
+    @property
+    def error_details(self) -> str:
+        return f"Tool `{self.tool_name}` failed [{self.status.value}][{self.code}]: {self.message}"
+
+    def __str__(self) -> str:
+        return self.error_details

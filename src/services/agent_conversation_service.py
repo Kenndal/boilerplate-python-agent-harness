@@ -42,9 +42,7 @@ class AgentConversationService:
         self.message_service = message_service
         self.runner = runner
         self.max_history_messages = (
-            max_history_messages
-            if max_history_messages is not None
-            else config.AGENT_MAX_HISTORY_MESSAGES
+            max_history_messages if max_history_messages is not None else config.AGENT_MAX_HISTORY_MESSAGES
         )
 
     async def send_message(
@@ -54,9 +52,7 @@ class AgentConversationService:
         user_id: str,
         agent_deps: AgentDeps,
     ) -> Result[AgentTurnResponse, ErrorResult]:
-        match await self.session_service.get_session_by_id_for_user(
-            session_id, user_id
-        ):
+        match await self.session_service.get_session_by_id_for_user(session_id, user_id):
             case Err(error):
                 return Err(error)
             case Ok(_):
@@ -82,9 +78,7 @@ class AgentConversationService:
                     )
                 )
 
-        match await self.runner.run(
-            prompt=prompt, history=history or None, deps=agent_deps
-        ):
+        match await self.runner.run(prompt=prompt, history=history or None, deps=agent_deps):
             case Err(error):
                 return Err(error)
             case Ok(runner_output):
@@ -139,10 +133,7 @@ class AgentConversationService:
                 return Ok(
                     AgentTurnResponse(
                         output=runner_output.output,
-                        new_messages=[
-                            AgentMessage.model_validate(m.model_dump())
-                            for m in persisted
-                        ],
+                        new_messages=[AgentMessage.model_validate(m.model_dump()) for m in persisted],
                     )
                 )
             case _:
