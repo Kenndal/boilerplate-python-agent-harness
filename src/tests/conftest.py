@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.testclient import TestClient
 
+from src.api_server.deps import get_default_agent
 from src.api_server.main import app
 from src.data_services.agent_message_data_service import AgentMessageDataService
 from src.data_services.agent_session_data_service import AgentSessionDataService
@@ -37,10 +38,13 @@ def fake_user_id() -> str:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    if not hasattr(app.state, "default_agent"):
-        app.state.default_agent = AsyncMock()
-    with TestClient(app) as test_client:
-        yield test_client
+    mock_agent = AsyncMock()
+    app.dependency_overrides[get_default_agent] = lambda: mock_agent
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_default_agent, None)
 
 
 @pytest.fixture(scope="session")
