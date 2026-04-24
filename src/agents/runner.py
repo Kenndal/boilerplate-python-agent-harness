@@ -49,34 +49,20 @@ def _map_pai_error(exc: Exception) -> ErrorResult:
     """
     if isinstance(exc, ModelHTTPError):
         if exc.status_code in {HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN}:
-            return ErrorResult(
-                status=ErrorStatus.BAD_REQUEST, details=f"LLM auth error: {exc}"
-            )
+            return ErrorResult(status=ErrorStatus.BAD_REQUEST, details=f"LLM auth error: {exc}")
         if exc.status_code == HTTP_429_TOO_MANY_REQUESTS:
-            return ErrorResult(
-                status=ErrorStatus.CONFLICT, details=f"LLM rate limited: {exc}"
-            )
+            return ErrorResult(status=ErrorStatus.CONFLICT, details=f"LLM rate limited: {exc}")
         return ErrorResult(
             status=ErrorStatus.INTERNAL_ERROR,
             details=f"LLM HTTP error {exc.status_code}: {exc}",
         )
     if isinstance(exc, UsageLimitExceeded):
-        return ErrorResult(
-            status=ErrorStatus.BAD_REQUEST, details=f"Usage limit exceeded: {exc}"
-        )
-    if isinstance(
-        exc, (UnexpectedModelBehavior, AgentRunError, ModelAPIError, UserError)
-    ):
-        return ErrorResult(
-            status=ErrorStatus.INTERNAL_ERROR, details=f"Agent run failed: {exc}"
-        )
+        return ErrorResult(status=ErrorStatus.BAD_REQUEST, details=f"Usage limit exceeded: {exc}")
+    if isinstance(exc, (UnexpectedModelBehavior, AgentRunError, ModelAPIError, UserError)):
+        return ErrorResult(status=ErrorStatus.INTERNAL_ERROR, details=f"Agent run failed: {exc}")
     if isinstance(exc, TimeoutError):
-        return ErrorResult(
-            status=ErrorStatus.INTERNAL_ERROR, details="LLM request timed out"
-        )
-    return ErrorResult(
-        status=ErrorStatus.INTERNAL_ERROR, details=f"Unexpected agent error: {exc}"
-    )
+        return ErrorResult(status=ErrorStatus.INTERNAL_ERROR, details="LLM request timed out")
+    return ErrorResult(status=ErrorStatus.INTERNAL_ERROR, details=f"Unexpected agent error: {exc}")
 
 
 class AgentRunner:

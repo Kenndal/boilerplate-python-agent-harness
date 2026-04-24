@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from fastapi import Depends
 from pydantic_ai import Agent
@@ -72,7 +73,7 @@ def get_agent_message_service(
 
 
 def get_default_agent(request: Request) -> Agent[AgentDeps, str]:
-    return request.app.state.default_agent
+    return cast(Agent[AgentDeps, str], request.app.state.default_agent)
 
 
 def get_default_agent_runner(agent: Agent[AgentDeps, str] = Depends(get_default_agent)) -> AgentRunner:

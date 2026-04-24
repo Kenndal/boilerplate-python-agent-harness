@@ -1,19 +1,20 @@
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.exceptions import (
     AgentRunError,
     ModelAPIError,
+    ModelHTTPError,
     UnexpectedModelBehavior,
     UsageLimitExceeded,
     UserError,
 )
+import pytest
 from result import Err
 
 from src.agents.deps import AgentDeps
 from src.agents.runner import AgentRunner
 from src.models.enums.error_status import ErrorStatus
+from src.models.error_result import ErrorResult
 
 
 def _build_runner_with_side_effect(exc: Exception) -> AgentRunner:
@@ -22,7 +23,7 @@ def _build_runner_with_side_effect(exc: Exception) -> AgentRunner:
     return AgentRunner(agent=agent)
 
 
-async def _run_with_exception(exc: Exception) -> Err:
+async def _run_with_exception(exc: Exception) -> Err[ErrorResult]:
     runner = _build_runner_with_side_effect(exc)
     result = await runner.run(
         prompt="hello",

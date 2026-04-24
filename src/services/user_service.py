@@ -12,12 +12,8 @@ from src.services.base_service import BaseService
 
 class UserService(BaseService[UserEntity, User, UserCreate, UserUpdate]):
     data_service: UserDataService
-    CREATE_UNIQUE_VALIDATION_MSG = (
-        "{model_class} with given username or email already exists"
-    )
-    UPDATE_UNIQUE_VALIDATION_MSG = (
-        "{model_class} with given username or email already exists"
-    )
+    CREATE_UNIQUE_VALIDATION_MSG = "{model_class} with given username or email already exists"
+    UPDATE_UNIQUE_VALIDATION_MSG = "{model_class} with given username or email already exists"
     model_class = User
 
     async def get_page(
