@@ -10,16 +10,16 @@ todos:
     status: completed
   - id: agent-di-refactor
     content: Refactor global sample agent into DI-driven factory and registry integration
-    status: pending
+    status: cancelled
   - id: history-token-budget
     content: Add token-aware history clipping configuration and implementation
-    status: pending
+    status: cancelled
   - id: tool-error-semantics
     content: Improve tool error structure and runner mapping/logging consistency
     status: completed
   - id: pydantic-ai-tests
     content: Add runner mapping tests and pydantic-ai-native model/tool behavior tests
-    status: pending
+    status: completed
 isProject: false
 ---
 
