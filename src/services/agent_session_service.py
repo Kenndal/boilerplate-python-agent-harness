@@ -25,11 +25,7 @@ from src.utils.exceptions import CrudError
 logger = logging.getLogger(__name__)
 
 
-class AgentSessionService(
-    BaseService[
-        AgentSessionEntity, AgentSession, AgentSessionCreate, AgentSessionUpdate
-    ]
-):
+class AgentSessionService(BaseService[AgentSessionEntity, AgentSession, AgentSessionCreate, AgentSessionUpdate]):
     data_service: AgentSessionDataService
     message_data_service: AgentMessageDataService
     model_class = AgentSession
@@ -54,15 +50,9 @@ class AgentSessionService(
     ) -> Result[ModelList[AgentSession], ErrorResult]:
         filters = []
         if owner_user_id is not None:
-            filters.append(
-                EqualsFilter(
-                    field=AgentSessionEntity.owner_user_id, value=owner_user_id
-                )
-            )
+            filters.append(EqualsFilter(field=AgentSessionEntity.owner_user_id, value=owner_user_id))
         if is_active is not None:
-            filters.append(
-                EqualsFilter(field=AgentSessionEntity.is_active, value=is_active)
-            )
+            filters.append(EqualsFilter(field=AgentSessionEntity.is_active, value=is_active))
 
         return await super().get_page(
             page_number=page_number,
@@ -73,9 +63,7 @@ class AgentSessionService(
             sort_direction=sort_direction,
         )
 
-    async def get_session_by_id_for_user(
-        self, session_id: UUID, user_id: str
-    ) -> Result[AgentSession, ErrorResult]:
+    async def get_session_by_id_for_user(self, session_id: UUID, user_id: str) -> Result[AgentSession, ErrorResult]:
         """Return the session only when it belongs to the caller.
 
         Deliberately returns `NOT_FOUND` (not `FORBIDDEN`) on an owner mismatch so the API
@@ -108,11 +96,7 @@ class AgentSessionService(
                         sort_direction=SortDirection.ascending,
                     )
                 except CrudError as e:
-                    return Err(
-                        self._error_response(
-                            status=ErrorStatus.INTERNAL_ERROR, details=str(e)
-                        )
-                    )
+                    return Err(self._error_response(status=ErrorStatus.INTERNAL_ERROR, details=str(e)))
                 return Ok(
                     AgentSessionWithMessages(
                         **session.model_dump(),
@@ -124,7 +108,5 @@ class AgentSessionService(
 
     def _session_not_found(self, session_id: UUID) -> ErrorResult:
         return self._not_found_error_response(
-            self.GET_BY_ID_NOT_FOUND_MSG.format(
-                model_class=self.model_class.__name__, id=str(session_id)
-            )
+            self.GET_BY_ID_NOT_FOUND_MSG.format(model_class=self.model_class.__name__, id=str(session_id))
         )

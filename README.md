@@ -268,6 +268,14 @@ This runs:
 
 **Configure your IDE** to use these tools on save for the best experience.
 
+### Dependency Upgrade Cadence
+
+The project uses a bounded policy for `pydantic-ai-slim[openai]` (`>=1.85.0,<2`) to avoid unplanned major-version changes from lock refreshes.
+
+- Review and refresh dependency locks on a regular monthly cadence.
+- Apply patch/minor `pydantic-ai` upgrades after CI and targeted agent-flow tests pass.
+- Handle major version upgrades as explicit maintenance work with migration notes and regression verification.
+
 ### Adding New Entities
 
 1. **Create entity** in `src/database/entities/`

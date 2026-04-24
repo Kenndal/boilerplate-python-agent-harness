@@ -56,9 +56,7 @@ def upgrade() -> None:
         sa.Column("role", sa.String(), nullable=False),
         sa.Column("content", sa.String(), nullable=False),
         sa.Column("tool_name", sa.String(), nullable=True),
-        sa.Column(
-            "tool_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("tool_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("input_tokens", sa.Integer(), nullable=True),
         sa.Column("output_tokens", sa.Integer(), nullable=True),
         sa.Column("created_date", sa.DateTime(), nullable=False),
@@ -67,13 +65,9 @@ def upgrade() -> None:
         sa.Column("last_modified_by_user_id", sa.String(), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("tool_call_id", sa.String(), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["session_id"], ["sample_schema.agent_session.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["session_id"], ["sample_schema.agent_session.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "session_id", "sequence", name="uq_agent_message_session_sequence"
-        ),
+        sa.UniqueConstraint("session_id", "sequence", name="uq_agent_message_session_sequence"),
         schema="sample_schema",
     )
     op.create_index(

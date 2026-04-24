@@ -1,7 +1,10 @@
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from fastapi import Depends
+from pydantic_ai import Agent
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from src.agents.deps import AgentDeps
 from src.agents.runner import AgentRunner
@@ -69,14 +72,18 @@ def get_agent_message_service(
     return AgentMessageService(data_service=message_data_service)
 
 
-def get_agent_runner() -> AgentRunner:
-    return AgentRunner()
+def get_default_agent(request: Request) -> Agent[AgentDeps, str]:
+    return cast(Agent[AgentDeps, str], request.app.state.default_agent)
+
+
+def get_default_agent_runner(agent: Agent[AgentDeps, str] = Depends(get_default_agent)) -> AgentRunner:
+    return AgentRunner(agent=agent)
 
 
 def get_agent_conversation_service(
     session_service: AgentSessionService = Depends(get_agent_session_service),
     message_service: AgentMessageService = Depends(get_agent_message_service),
-    runner: AgentRunner = Depends(get_agent_runner),
+    runner: AgentRunner = Depends(get_default_agent_runner),
 ) -> AgentConversationService:
     return AgentConversationService(
         session_service=session_service,

@@ -46,9 +46,7 @@ async def list_sessions(
     omit_pagination: bool = Query(default=False, alias=OMIT_PAGINATION),
     is_active: bool | None = Query(default=None),
     sort_by: str | None = Query(default=None, alias=SORT_BY),
-    sort_direction: SortDirection = Query(
-        default=SortDirection.ascending, alias=SORT_DIRECTION
-    ),
+    sort_direction: SortDirection = Query(default=SortDirection.ascending, alias=SORT_DIRECTION),
     current_user_id: str = Depends(get_current_user_id),
     session_service: AgentSessionService = Depends(get_agent_session_service),
 ) -> ModelList[AgentSession]:
@@ -88,17 +86,13 @@ async def create_session(
             raise http_exception_from_error()
 
 
-@router.get(
-    "/{session_id}", response_model=AgentSessionWithMessages, responses=response_404
-)
+@router.get("/{session_id}", response_model=AgentSessionWithMessages, responses=response_404)
 async def get_session(
     session_id: UUID = Path(...),
     current_user_id: str = Depends(get_current_user_id),
     session_service: AgentSessionService = Depends(get_agent_session_service),
 ) -> AgentSessionWithMessages:
-    match await session_service.get_session_with_messages_for_user(
-        session_id, current_user_id
-    ):
+    match await session_service.get_session_with_messages_for_user(session_id, current_user_id):
         case Ok(result):
             return result
         case Err(error):
@@ -126,17 +120,13 @@ async def delete_session(
             raise http_exception_from_error(error)
 
 
-@router.post(
-    "/{session_id}/messages", response_model=AgentTurnResponse, responses=response_404
-)
+@router.post("/{session_id}/messages", response_model=AgentTurnResponse, responses=response_404)
 async def send_message(
     payload: AgentPromptRequest,
     session_id: UUID = Path(...),
     current_user_id: str = Depends(get_current_user_id),
     agent_deps: AgentDeps = Depends(get_agent_deps),
-    conversation_service: AgentConversationService = Depends(
-        get_agent_conversation_service
-    ),
+    conversation_service: AgentConversationService = Depends(get_agent_conversation_service),
 ) -> AgentTurnResponse:
     match await conversation_service.send_message(
         session_id=session_id,

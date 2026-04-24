@@ -2,13 +2,13 @@ services:
   # PostgreSQL Database
   db:
     image: postgres:15
-    container_name: fastapi_postgres
+    container_name: boilerplate_python_agent_harness_postgres
     env_file:
       - .env
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data_boilerplate_python_agent_harness:/var/lib/postgresql/data
       - ./src/database/scripts/create_db.sql:/docker-entrypoint-initdb.d/create_db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -21,7 +21,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: fastapi_app
+    container_name: boilerplate_python_agent_harness
     ports:
       - "8000:8000"
     env_file:
@@ -33,4 +33,4 @@ services:
     # TODO: Add health check for FastAPI app
 
 volumes:
-  postgres_data:
+  postgres_data_boilerplate_python_agent_harness:

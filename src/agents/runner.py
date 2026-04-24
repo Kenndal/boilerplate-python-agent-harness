@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 import logging
+from typing import Any
 
+from pydantic_ai import Agent
 from pydantic_ai.exceptions import (
     AgentRunError,
     ModelAPIError,
@@ -19,7 +21,6 @@ from starlette.status import (
 )
 
 from src.agents.deps import AgentDeps
-from src.agents.registry import get_default_agent
 from src.models.enums.error_status import ErrorStatus
 from src.models.error_result import ErrorResult
 
@@ -68,12 +69,15 @@ class AgentRunner:
     """Thin orchestration layer wrapping `pydantic_ai.Agent.run`.
 
     Responsibilities:
-    - Resolve the single application-wide agent via `get_default_agent`.
+    - Run against the injected `pydantic_ai.Agent` selected by DI.
     - Run the agent with the caller-supplied `message_history` already hydrated from storage.
     - Normalise provider/timeout/auth errors into our `ErrorResult` taxonomy.
     - Return the newly-produced `ModelMessage`s plus token counts so the conversation service
       can persist them.  Token counts never leave the server boundary.
     """
+
+    def __init__(self, agent: Agent[AgentDeps, Any]) -> None:
+        self._agent = agent
 
     async def run(
         self,
@@ -82,17 +86,23 @@ class AgentRunner:
         deps: AgentDeps,
         usage_limits: UsageLimits | None = None,
     ) -> Result[RunnerOutput, ErrorResult]:
-        agent = get_default_agent()
         try:
-            result = await agent.run(
+            result = await self._agent.run(
                 prompt,
                 deps=deps,
                 message_history=history,
                 usage_limits=usage_limits,
             )
         except Exception as e:
-            logger.exception("Agent run failed")
-            return Err(_map_pai_error(e))
+            mapped = _map_pai_error(e)
+            logger.exception(
+                "Agent run failed",
+                extra={
+                    "error_type": type(e).__name__,
+                    "error_status": mapped.status.value,
+                },
+            )
+            return Err(mapped)
 
         usage = result.usage()
         return Ok(

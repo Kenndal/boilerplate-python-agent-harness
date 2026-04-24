@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import cast
 from unittest.mock import AsyncMock
@@ -7,6 +8,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.testclient import TestClient
 
+from src.api_server.deps import get_default_agent
 from src.api_server.main import app
 from src.data_services.agent_message_data_service import AgentMessageDataService
 from src.data_services.agent_session_data_service import AgentSessionDataService
@@ -35,15 +37,24 @@ def fake_user_id() -> str:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
+def client() -> Iterator[TestClient]:
+    mock_agent = AsyncMock()
+    app.dependency_overrides[get_default_agent] = lambda: mock_agent
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_default_agent, None)
 
 
 @pytest.fixture(scope="session")
 def audit(user_id: str) -> BaseAudit:
     now = datetime.now(tz=UTC)
     return BaseAudit(
-        created_date=now, last_modified_date=now, created_by_user_id=user_id, last_modified_by_user_id=user_id
+        created_date=now,
+        last_modified_date=now,
+        created_by_user_id=user_id,
+        last_modified_by_user_id=user_id,
     )
 
 
@@ -89,5 +100,7 @@ def agent_session_service(
 
 
 @pytest.fixture
-def agent_message_service(agent_message_data_service: AgentMessageDataService) -> AgentMessageService:
+def agent_message_service(
+    agent_message_data_service: AgentMessageDataService,
+) -> AgentMessageService:
     return AgentMessageService(data_service=agent_message_data_service)
