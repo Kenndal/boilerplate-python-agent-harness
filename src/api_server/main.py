@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from functools import partial
 import logging
 import logging.config
@@ -20,6 +22,8 @@ from starlette.status import (
     HTTP_422_UNPROCESSABLE_CONTENT,
 )
 
+from src.agents.model_factory import build_openrouter_http_client, build_openrouter_model
+from src.agents.sample.agent import build_sample_agent
 from src.api_server.helpers.utils import build_validation_error_detail
 from src.api_server.responses import response_400, response_401, response_403, response_500
 from src.api_server.routers import agent, user
@@ -33,6 +37,18 @@ logger = logging.getLogger(__name__)
 domain_pattern = r"http:\/\/localhost:3000"  # TODO: update with real domains
 
 
+@asynccontextmanager
+async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    http_client = build_openrouter_http_client()
+    model = build_openrouter_model(http_client=http_client)
+    app.state.default_agent = build_sample_agent(model=model)
+    app.state.openrouter_http_client = http_client
+    try:
+        yield
+    finally:
+        await app.state.openrouter_http_client.aclose()
+
+
 def build_app() -> FastAPI:
     _app = FastAPI(
         title="boilerplate-api",
@@ -42,6 +58,7 @@ def build_app() -> FastAPI:
         docs_url="/",
         debug=not config.IS_PROD,
         responses=response_400 | response_401 | response_403 | response_500,
+        lifespan=app_lifespan,
     )
 
     # Add routers

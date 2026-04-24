@@ -23,7 +23,7 @@ dependencies = [
     "result>=0.17.0",
     "pydantic-settings>=2.11.0",
     "asgi-correlation-id>=4.3.4",
-    "pydantic-ai-slim[openai]>=1.85.0",
+    "pydantic-ai-slim[openai]>=1.85.0,<2",
 ]
 
 [project.urls]

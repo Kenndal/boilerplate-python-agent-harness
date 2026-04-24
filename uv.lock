@@ -112,7 +112,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.120.1" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.10.4" },
-    { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.85.0" },
+    { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=1.85.0,<2" },
     { name = "pydantic-settings", specifier = ">=2.11.0" },
     { name = "result", specifier = ">=0.17.0" },
     { name = "sqlalchemy", extras = ["asyncio", "mypy"], specifier = ">=2.0.36" },

@@ -19,7 +19,9 @@ from src.services.agent_session_service import AgentSessionService
 
 @pytest.fixture
 def runner() -> AgentRunner:
-    return AgentRunner()
+    agent = MagicMock()
+    agent.run = AsyncMock()
+    return AgentRunner(agent=agent)
 
 
 @pytest.fixture
@@ -47,7 +49,12 @@ async def test_send_message_returns_not_found_when_session_missing(
     mocker: MockerFixture,
 ) -> None:
     err = ErrorResult(status=ErrorStatus.NOT_FOUND_ERROR, details="missing")
-    mocker.patch.object(AgentSessionService, "get_session_by_id_for_user", new_callable=AsyncMock, return_value=Err(err))
+    mocker.patch.object(
+        AgentSessionService,
+        "get_session_by_id_for_user",
+        new_callable=AsyncMock,
+        return_value=Err(err),
+    )
 
     result = await conversation_service.send_message(
         session_id=uuid4(),
